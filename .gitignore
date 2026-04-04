@@ -1,1 +1,5 @@
-
+victorialogs-compat-layer
+*.exe
+*.test
+*.out
+/build/
