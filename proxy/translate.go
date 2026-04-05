@@ -20,14 +20,26 @@ func TranslateQuery(lokiQuery string) string {
 	return "_stream:" + q
 }
 
-// TranslateTimestamp converts a nanosecond Unix epoch string (as Loki sends)
-// to an RFC3339 timestamp string for VictoriaLogs.
-func TranslateTimestamp(nanos string) (string, error) {
-	ns, err := strconv.ParseInt(nanos, 10, 64)
-	if err != nil {
-		return "", fmt.Errorf("invalid timestamp %q: %w", nanos, err)
+// parseTimestamp parses a timestamp string that may be either a nanosecond
+// Unix epoch (e.g. "1700000000000000000") or an ISO 8601 / RFC3339 string
+// (e.g. "2026-04-05T05:23:26.735Z"). Returns the parsed time in UTC.
+func parseTimestamp(s string) (time.Time, error) {
+	if ns, err := strconv.ParseInt(s, 10, 64); err == nil {
+		return time.Unix(0, ns).UTC(), nil
 	}
-	t := time.Unix(0, ns).UTC()
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t.UTC(), nil
+	}
+	return time.Time{}, fmt.Errorf("invalid timestamp %q: not a nanosecond epoch or RFC3339 value", s)
+}
+
+// TranslateTimestamp converts a timestamp string (nanosecond Unix epoch or
+// RFC3339/ISO 8601) to an RFC3339 timestamp string for VictoriaLogs.
+func TranslateTimestamp(raw string) (string, error) {
+	t, err := parseTimestamp(raw)
+	if err != nil {
+		return "", err
+	}
 	return t.Format(time.RFC3339), nil
 }
 
@@ -59,11 +71,14 @@ func BuildHitsRequest(backend *url.URL, lokiParams url.Values) (*http.Request, e
 
 	// Calculate step as the entire time range (single bucket for total volume).
 	if startNs != "" && endNs != "" {
-		startInt, _ := strconv.ParseInt(startNs, 10, 64)
-		endInt, _ := strconv.ParseInt(endNs, 10, 64)
-		dur := time.Duration(endInt - startInt)
-		if dur <= 0 {
-			dur = time.Hour
+		startTime, err1 := parseTimestamp(startNs)
+		endTime, err2 := parseTimestamp(endNs)
+		dur := time.Hour
+		if err1 == nil && err2 == nil {
+			dur = endTime.Sub(startTime)
+			if dur <= 0 {
+				dur = time.Hour
+			}
 		}
 		q.Set("step", dur.String())
 	} else {
