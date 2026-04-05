@@ -120,3 +120,98 @@ func TestBuildHitsRequest_EmptyQuery(t *testing.T) {
 	q := req.URL.Query()
 	assert.Equal(t, "*", q.Get("query"))
 }
+
+func TestBuildFieldNamesRequest(t *testing.T) {
+	backend, _ := url.Parse("http://localhost:9428")
+	params := url.Values{
+		"query": {`{job="test"}`},
+		"start": {"1700000000000000000"},
+		"end":   {"1700003600000000000"},
+	}
+
+	req, err := BuildFieldNamesRequest(backend, params)
+	require.Nil(t, err)
+
+	assert.Equal(t, "/select/logsql/field_names", req.URL.Path)
+	q := req.URL.Query()
+	assert.Equal(t, `_stream:{job="test"}`, q.Get("query"))
+	assert.Equal(t, "2023-11-14T22:13:20Z", q.Get("start"))
+	assert.Equal(t, "2023-11-14T23:13:20Z", q.Get("end"))
+}
+
+func TestBuildFieldNamesRequest_EmptyQuery(t *testing.T) {
+	backend, _ := url.Parse("http://localhost:9428")
+	params := url.Values{}
+
+	req, err := BuildFieldNamesRequest(backend, params)
+	require.Nil(t, err)
+
+	q := req.URL.Query()
+	assert.Equal(t, "*", q.Get("query"))
+}
+
+func TestBuildStreamFieldNamesRequest(t *testing.T) {
+	backend, _ := url.Parse("http://localhost:9428")
+	params := url.Values{
+		"query": {`{job="test"}`},
+		"start": {"1700000000000000000"},
+		"end":   {"1700003600000000000"},
+	}
+
+	req, err := BuildStreamFieldNamesRequest(backend, params)
+	require.Nil(t, err)
+
+	assert.Equal(t, "/select/logsql/stream_field_names", req.URL.Path)
+	q := req.URL.Query()
+	assert.Equal(t, `_stream:{job="test"}`, q.Get("query"))
+}
+
+func TestBuildStreamFieldValuesRequest(t *testing.T) {
+	backend, _ := url.Parse("http://localhost:9428")
+	params := url.Values{
+		"query": {`{job="test"}`},
+		"start": {"1700000000000000000"},
+		"end":   {"1700003600000000000"},
+	}
+
+	req, err := BuildStreamFieldValuesRequest(backend, params, "job")
+	require.Nil(t, err)
+
+	assert.Equal(t, "/select/logsql/stream_field_values", req.URL.Path)
+	q := req.URL.Query()
+	assert.Equal(t, `_stream:{job="test"}`, q.Get("query"))
+	assert.Equal(t, "job", q.Get("field_name"))
+}
+
+func TestBuildHitsRangeRequest(t *testing.T) {
+	backend, _ := url.Parse("http://localhost:9428")
+	params := url.Values{
+		"query":        {`{job="test"}`},
+		"start":        {"1700000000000000000"},
+		"end":          {"1700003600000000000"},
+		"step":         {"5m"},
+		"limit":        {"50"},
+		"targetLabels": {"job,env"},
+	}
+
+	req, err := BuildHitsRangeRequest(backend, params)
+	require.Nil(t, err)
+
+	assert.Equal(t, "/select/logsql/hits", req.URL.Path)
+	q := req.URL.Query()
+	assert.Equal(t, `_stream:{job="test"}`, q.Get("query"))
+	assert.Equal(t, "5m", q.Get("step"))
+	assert.Equal(t, "50", q.Get("fields_limit"))
+	assert.Equal(t, []string{"job", "env"}, q["field"])
+}
+
+func TestBuildHitsRangeRequest_DefaultStep(t *testing.T) {
+	backend, _ := url.Parse("http://localhost:9428")
+	params := url.Values{}
+
+	req, err := BuildHitsRangeRequest(backend, params)
+	require.Nil(t, err)
+
+	q := req.URL.Query()
+	assert.Equal(t, "1h", q.Get("step"))
+}

@@ -43,6 +43,110 @@ func TranslateTimestamp(raw string) (string, error) {
 	return t.Format(time.RFC3339), nil
 }
 
+// buildSimpleRequest creates a VictoriaLogs request with query, start, and end
+// translated from Loki parameters. Used by endpoints that only need these three params.
+func buildSimpleRequest(backend *url.URL, lokiParams url.Values, path string) (*http.Request, error) {
+	q := url.Values{}
+	q.Set("query", TranslateQuery(lokiParams.Get("query")))
+
+	if start := lokiParams.Get("start"); start != "" {
+		ts, err := TranslateTimestamp(start)
+		if err != nil {
+			return nil, fmt.Errorf("start: %w", err)
+		}
+		q.Set("start", ts)
+	}
+
+	if end := lokiParams.Get("end"); end != "" {
+		ts, err := TranslateTimestamp(end)
+		if err != nil {
+			return nil, fmt.Errorf("end: %w", err)
+		}
+		q.Set("end", ts)
+	}
+
+	u := *backend
+	u.Path = path
+	u.RawQuery = q.Encode()
+
+	return http.NewRequest(http.MethodGet, u.String(), nil)
+}
+
+// BuildFieldNamesRequest creates an HTTP request to the VictoriaLogs
+// /select/logsql/field_names endpoint from Loki detected_labels/detected_fields parameters.
+func BuildFieldNamesRequest(backend *url.URL, lokiParams url.Values) (*http.Request, error) {
+	return buildSimpleRequest(backend, lokiParams, "/select/logsql/field_names")
+}
+
+// BuildStreamFieldNamesRequest creates an HTTP request to the VictoriaLogs
+// /select/logsql/stream_field_names endpoint from Loki labels parameters.
+func BuildStreamFieldNamesRequest(backend *url.URL, lokiParams url.Values) (*http.Request, error) {
+	return buildSimpleRequest(backend, lokiParams, "/select/logsql/stream_field_names")
+}
+
+// BuildStreamFieldValuesRequest creates an HTTP request to the VictoriaLogs
+// /select/logsql/stream_field_values endpoint from Loki label values parameters.
+func BuildStreamFieldValuesRequest(backend *url.URL, lokiParams url.Values, fieldName string) (*http.Request, error) {
+	req, err := buildSimpleRequest(backend, lokiParams, "/select/logsql/stream_field_values")
+	if err != nil {
+		return nil, err
+	}
+	q := req.URL.Query()
+	q.Set("field_name", fieldName)
+	req.URL.RawQuery = q.Encode()
+	return req, nil
+}
+
+// BuildHitsRangeRequest creates an HTTP request to the VictoriaLogs
+// /select/logsql/hits endpoint from Loki volume_range request parameters.
+// Unlike BuildHitsRequest, the step is taken from the Loki request directly.
+func BuildHitsRangeRequest(backend *url.URL, lokiParams url.Values) (*http.Request, error) {
+	q := url.Values{}
+
+	q.Set("query", TranslateQuery(lokiParams.Get("query")))
+
+	if start := lokiParams.Get("start"); start != "" {
+		ts, err := TranslateTimestamp(start)
+		if err != nil {
+			return nil, fmt.Errorf("start: %w", err)
+		}
+		q.Set("start", ts)
+	}
+
+	if end := lokiParams.Get("end"); end != "" {
+		ts, err := TranslateTimestamp(end)
+		if err != nil {
+			return nil, fmt.Errorf("end: %w", err)
+		}
+		q.Set("end", ts)
+	}
+
+	if step := lokiParams.Get("step"); step != "" {
+		q.Set("step", step)
+	} else {
+		q.Set("step", "1h")
+	}
+
+	if limit := lokiParams.Get("limit"); limit != "" {
+		q.Set("fields_limit", limit)
+	}
+
+	if targetLabels := lokiParams.Get("targetLabels"); targetLabels != "" {
+		for _, label := range strings.Split(targetLabels, ",") {
+			label = strings.TrimSpace(label)
+			if label != "" {
+				q.Add("field", label)
+			}
+		}
+	}
+
+	u := *backend
+	u.Path = "/select/logsql/hits"
+	u.RawQuery = q.Encode()
+
+	return http.NewRequest(http.MethodGet, u.String(), nil)
+}
+
 // BuildHitsRequest creates an HTTP request to the VictoriaLogs
 // /select/logsql/hits endpoint from Loki volume request parameters.
 func BuildHitsRequest(backend *url.URL, lokiParams url.Values) (*http.Request, error) {
