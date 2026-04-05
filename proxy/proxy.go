@@ -23,6 +23,9 @@ func NewProxy(backend *url.URL) http.Handler {
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 	mux.HandleFunc(volumePath, func(w http.ResponseWriter, r *http.Request) {
 		handleVolume(w, r, backend)
 	})
