@@ -25,16 +25,44 @@ func TestTranslateQuery(t *testing.T) {
 }
 
 func TestTranslateTimestamp(t *testing.T) {
-	// 1700000000 seconds = 2023-11-14T22:13:20Z
-	got, err := TranslateTimestamp("1700000000000000000")
-	require.Nil(t, err)
-
-	want := "2023-11-14T22:13:20Z"
-	assert.Equal(t, want, got)
-
-	// Invalid input.
-	_, err = TranslateTimestamp("not-a-number")
-	assert.NotNil(t, err)
+	tests := []struct {
+		name    string
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{
+			name:  "nanosecond epoch",
+			input: "1700000000000000000",
+			want:  "2023-11-14T22:13:20Z",
+		},
+		{
+			name:  "RFC3339",
+			input: "2023-11-14T22:13:20Z",
+			want:  "2023-11-14T22:13:20Z",
+		},
+		{
+			name:  "RFC3339 with milliseconds",
+			input: "2026-04-05T05:23:26.735Z",
+			want:  "2026-04-05T05:23:26Z",
+		},
+		{
+			name:    "invalid",
+			input:   "not-a-number",
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := TranslateTimestamp(tt.input)
+			if tt.wantErr {
+				assert.NotNil(t, err)
+				return
+			}
+			require.Nil(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 func TestBuildHitsRequest(t *testing.T) {
@@ -63,6 +91,23 @@ func TestBuildHitsRequest(t *testing.T) {
 	assert.Equal(t, []string{"job", "env"}, fields)
 
 	assert.NotEqual(t, "", q.Get("step"))
+}
+
+func TestBuildHitsRequest_RFC3339Timestamps(t *testing.T) {
+	backend, _ := url.Parse("http://localhost:9428")
+	params := url.Values{
+		"query": {`{job="test"}`},
+		"start": {"2023-11-14T22:13:20Z"},
+		"end":   {"2023-11-14T23:13:20Z"},
+	}
+
+	req, err := BuildHitsRequest(backend, params)
+	require.Nil(t, err)
+
+	q := req.URL.Query()
+	assert.Equal(t, "2023-11-14T22:13:20Z", q.Get("start"))
+	assert.Equal(t, "2023-11-14T23:13:20Z", q.Get("end"))
+	assert.Equal(t, "1h0m0s", q.Get("step"))
 }
 
 func TestBuildHitsRequest_EmptyQuery(t *testing.T) {
