@@ -696,3 +696,36 @@ func TestPromSeriesEndpoint(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
+
+func TestDetectedFieldValuesEndpoint_BackendUnreachable(t *testing.T) {
+	backendURL, _ := url.Parse("http://127.0.0.1:1")
+	handler := NewProxy(backendURL)
+
+	req := httptest.NewRequest(http.MethodGet, "/loki/api/v1/detected_field/level/values", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadGateway, rec.Code)
+}
+
+func TestIndexStatsEndpoint_BackendUnreachable(t *testing.T) {
+	backendURL, _ := url.Parse("http://127.0.0.1:1")
+	handler := NewProxy(backendURL)
+
+	req := httptest.NewRequest(http.MethodGet, "/loki/api/v1/index/stats?query=%7B%7D", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadGateway, rec.Code)
+}
+
+func TestLabelValuesEndpoint_BackendUnreachable(t *testing.T) {
+	backendURL, _ := url.Parse("http://127.0.0.1:1")
+	handler := NewProxy(backendURL)
+
+	req := httptest.NewRequest(http.MethodGet, "/loki/api/v1/label/job/values", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadGateway, rec.Code)
+}

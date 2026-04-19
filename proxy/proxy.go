@@ -33,6 +33,8 @@ const (
 	otlpLogsPath            = "/otlp/v1/logs"
 	readyPath               = "/ready"
 	buildinfoPath           = "/loki/api/v1/status/buildinfo"
+	tailPath                = "/loki/api/v1/tail"
+	promTailPath            = "/api/prom/tail"
 )
 
 // notImplementedPaths lists every Loki API path that the compat layer does not
@@ -41,9 +43,6 @@ const (
 var notImplementedPaths = []string{
 	// Index
 	"/loki/api/v1/index/shards",
-	// Live tail (WebSocket — not yet implemented)
-	"/loki/api/v1/tail",
-	"/api/prom/tail",
 	// Ruler / alerting
 	"/loki/api/v1/rules",
 	"/loki/api/v1/rules/{namespace}",
@@ -140,6 +139,12 @@ func NewProxy(backend *url.URL) http.Handler {
 	mux.HandleFunc(buildinfoPath, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"version":"2.9.0","revision":"","branch":"","buildUser":"","buildDate":"","goVersion":""}`))
+	})
+	mux.HandleFunc(tailPath, func(w http.ResponseWriter, r *http.Request) {
+		handleTail(w, r, backend)
+	})
+	mux.HandleFunc(promTailPath, func(w http.ResponseWriter, r *http.Request) {
+		handleTail(w, r, backend)
 	})
 	for _, path := range notImplementedPaths {
 		mux.HandleFunc(path, notImplemented)
