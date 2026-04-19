@@ -5,8 +5,8 @@ Tracks every Loki HTTP endpoint against its current status in the compat layer.
 **Legend**
 - ✅ Translated — compat layer intercepts and converts to a VictoriaLogs equivalent
 - 🔁 Pass-through — forwarded to VictoriaLogs, which supports it natively
-- 🔲 Missing — not handled; proxied to VL which returns an error or wrong response
 - 🪄 Stub — intercepted and returns a hardcoded/empty response
+- 🪄 Stub (501) — intercepted and returns 501 Not Implemented
 
 ---
 
@@ -16,8 +16,8 @@ The core read path. Used by Grafana Explore, dashboards, and logcli.
 
 | Method | Path | Status | VictoriaLogs equivalent | Notes |
 |--------|------|--------|------------------------|-------|
-| GET/POST | `/loki/api/v1/query_range` | 🔲 Missing | `/select/logsql/query` | Range query — the most-used Grafana endpoint |
-| GET/POST | `/loki/api/v1/query` | 🔲 Missing | `/select/logsql/query` | Instant query |
+| GET/POST | `/loki/api/v1/query_range` | 🪄 Stub (501) | `/select/logsql/query` | Range query — the most-used Grafana endpoint |
+| GET/POST | `/loki/api/v1/query` | 🪄 Stub (501) | `/select/logsql/query` | Instant query |
 
 ---
 
@@ -25,9 +25,9 @@ The core read path. Used by Grafana Explore, dashboards, and logcli.
 
 | Method | Path | Status | VictoriaLogs equivalent | Notes |
 |--------|------|--------|------------------------|-------|
-| POST | `/loki/api/v1/push` | 🔲 Missing | `/insert/loki/api/v1/push` | VL path prefix differs from Loki |
-| POST | `/api/prom/push` | 🔲 Missing | `/insert/loki/api/v1/push` | Legacy push path |
-| POST | `/otlp/v1/logs` | 🔲 Missing | `/insert/opentelemetry/api/logs/export` | OTLP ingest |
+| POST | `/loki/api/v1/push` | 🪄 Stub (501) | `/insert/loki/api/v1/push` | VL path prefix differs from Loki |
+| POST | `/api/prom/push` | 🪄 Stub (501) | `/insert/loki/api/v1/push` | Legacy push path |
+| POST | `/otlp/v1/logs` | 🪄 Stub (501) | `/insert/opentelemetry/api/logs/export` | OTLP ingest |
 
 ---
 
@@ -36,9 +36,9 @@ The core read path. Used by Grafana Explore, dashboards, and logcli.
 | Method | Path | Status | VictoriaLogs equivalent | Notes |
 |--------|------|--------|------------------------|-------|
 | GET/POST | `/loki/api/v1/labels` | ✅ Translated | `/select/logsql/stream_field_names` | |
-| GET/POST | `/loki/api/v1/label` | 🔲 Missing | `/select/logsql/stream_field_names` | Alias for `/labels`; separate constant in Loki |
+| GET/POST | `/loki/api/v1/label` | 🪄 Stub (501) | `/select/logsql/stream_field_names` | Alias for `/labels`; separate constant in Loki |
 | GET/POST | `/loki/api/v1/label/{name}/values` | ✅ Translated | `/select/logsql/stream_field_values` | |
-| GET/POST | `/loki/api/v1/series` | 🔲 Missing | `/select/logsql/streams` | Returns matching log streams |
+| GET/POST | `/loki/api/v1/series` | 🪄 Stub (501) | `/select/logsql/streams` | Returns matching log streams |
 
 ---
 
@@ -50,7 +50,7 @@ Used by Grafana Logs Drilldown.
 |--------|------|--------|------------------------|-------|
 | GET/POST | `/loki/api/v1/detected_labels` | ✅ Translated | `/select/logsql/field_names` | |
 | GET/POST | `/loki/api/v1/detected_fields` | ✅ Translated | `/select/logsql/field_names` | |
-| GET/POST | `/loki/api/v1/detected_field/{name}/values` | 🔲 Missing | `/select/logsql/field_values` | Per-field value enumeration |
+| GET/POST | `/loki/api/v1/detected_field/{name}/values` | 🪄 Stub (501) | `/select/logsql/field_values` | Per-field value enumeration |
 
 ---
 
@@ -60,8 +60,8 @@ Used by Grafana Logs Drilldown.
 |--------|------|--------|------------------------|-------|
 | GET/POST | `/loki/api/v1/index/volume` | ✅ Translated | `/select/logsql/hits` | Single-bucket volume |
 | GET/POST | `/loki/api/v1/index/volume_range` | ✅ Translated | `/select/logsql/hits` | Time-series volume |
-| GET/POST | `/loki/api/v1/index/stats` | 🔲 Missing | `/select/logsql/stats` | Byte/chunk/entry counts |
-| GET/POST | `/loki/api/v1/index/shards` | 🔲 Missing | *(no VL equivalent)* | Query sharding hint; can return stub |
+| GET/POST | `/loki/api/v1/index/stats` | 🪄 Stub (501) | `/select/logsql/stats` | Byte/chunk/entry counts |
+| GET/POST | `/loki/api/v1/index/shards` | 🪄 Stub (501) | *(no VL equivalent)* | Query sharding hint; can return stub |
 
 ---
 
@@ -77,8 +77,8 @@ Used by Grafana Logs Drilldown.
 
 | Method | Path | Status | VictoriaLogs equivalent | Notes |
 |--------|------|--------|------------------------|-------|
-| GET | `/loki/api/v1/tail` | 🔲 Missing | `/select/logsql/tail` | WebSocket; VL tail uses different framing |
-| GET | `/api/prom/tail` | 🔲 Missing | `/select/logsql/tail` | Legacy WebSocket tail |
+| GET | `/loki/api/v1/tail` | 🪄 Stub (501) | `/select/logsql/tail` | WebSocket; VL tail uses different framing |
+| GET | `/api/prom/tail` | 🪄 Stub (501) | `/select/logsql/tail` | Legacy WebSocket tail |
 
 ---
 
@@ -88,19 +88,19 @@ VictoriaLogs has no native ruler. These endpoints are typically handled by a sep
 
 | Method | Path | Status | Notes |
 |--------|------|--------|-------|
-| GET | `/loki/api/v1/rules` | 🔲 Missing | List all rule groups |
-| GET | `/loki/api/v1/rules/{namespace}` | 🔲 Missing | |
-| POST | `/loki/api/v1/rules/{namespace}` | 🔲 Missing | Create/update rule group |
-| DELETE | `/loki/api/v1/rules/{namespace}` | 🔲 Missing | |
-| GET | `/loki/api/v1/rules/{namespace}/{groupName}` | 🔲 Missing | |
-| DELETE | `/loki/api/v1/rules/{namespace}/{groupName}` | 🔲 Missing | |
-| GET | `/prometheus/api/v1/rules` | 🔲 Missing | Prometheus-compat rule list |
-| GET | `/prometheus/api/v1/alerts` | 🔲 Missing | Prometheus-compat alert list |
-| GET | `/api/prom/rules` | 🔲 Missing | Legacy |
-| POST | `/api/prom/rules/{namespace}` | 🔲 Missing | Legacy |
-| DELETE | `/api/prom/rules/{namespace}` | 🔲 Missing | Legacy |
-| GET | `/api/prom/rules/{namespace}/{groupName}` | 🔲 Missing | Legacy |
-| DELETE | `/api/prom/rules/{namespace}/{groupName}` | 🔲 Missing | Legacy |
+| GET | `/loki/api/v1/rules` | 🪄 Stub (501) | List all rule groups |
+| GET | `/loki/api/v1/rules/{namespace}` | 🪄 Stub (501) | |
+| POST | `/loki/api/v1/rules/{namespace}` | 🪄 Stub (501) | Create/update rule group |
+| DELETE | `/loki/api/v1/rules/{namespace}` | 🪄 Stub (501) | |
+| GET | `/loki/api/v1/rules/{namespace}/{groupName}` | 🪄 Stub (501) | |
+| DELETE | `/loki/api/v1/rules/{namespace}/{groupName}` | 🪄 Stub (501) | |
+| GET | `/prometheus/api/v1/rules` | 🪄 Stub (501) | Prometheus-compat rule list |
+| GET | `/prometheus/api/v1/alerts` | 🪄 Stub (501) | Prometheus-compat alert list |
+| GET | `/api/prom/rules` | 🪄 Stub (501) | Legacy |
+| POST | `/api/prom/rules/{namespace}` | 🪄 Stub (501) | Legacy |
+| DELETE | `/api/prom/rules/{namespace}` | 🪄 Stub (501) | Legacy |
+| GET | `/api/prom/rules/{namespace}/{groupName}` | 🪄 Stub (501) | Legacy |
+| DELETE | `/api/prom/rules/{namespace}/{groupName}` | 🪄 Stub (501) | Legacy |
 
 ---
 
@@ -108,10 +108,10 @@ VictoriaLogs has no native ruler. These endpoints are typically handled by a sep
 
 | Method | Path | Status | Notes |
 |--------|------|--------|-------|
-| PUT/POST | `/loki/api/v1/delete` | 🔲 Missing | Add deletion request |
-| GET | `/loki/api/v1/delete` | 🔲 Missing | List deletion requests |
-| DELETE | `/loki/api/v1/delete` | 🔲 Missing | Cancel deletion request |
-| GET | `/loki/api/v1/cache/generation_numbers` | 🔲 Missing | Cache invalidation; can stub |
+| PUT/POST | `/loki/api/v1/delete` | 🪄 Stub (501) | Add deletion request |
+| GET | `/loki/api/v1/delete` | 🪄 Stub (501) | List deletion requests |
+| DELETE | `/loki/api/v1/delete` | 🪄 Stub (501) | Cancel deletion request |
+| GET | `/loki/api/v1/cache/generation_numbers` | 🪄 Stub (501) | Cache invalidation; can stub |
 
 ---
 
@@ -121,10 +121,10 @@ Older Grafana datasource plugin versions use this path prefix.
 
 | Method | Path | Status | VictoriaLogs equivalent | Notes |
 |--------|------|--------|------------------------|-------|
-| GET/POST | `/api/prom/query` | 🔲 Missing | `/select/logsql/query` | Same semantics as `/loki/api/v1/query` |
-| GET/POST | `/api/prom/label` | 🔲 Missing | `/select/logsql/stream_field_names` | |
-| GET/POST | `/api/prom/label/{name}/values` | 🔲 Missing | `/select/logsql/stream_field_values` | |
-| GET/POST | `/api/prom/series` | 🔲 Missing | `/select/logsql/streams` | |
+| GET/POST | `/api/prom/query` | 🪄 Stub (501) | `/select/logsql/query` | Same semantics as `/loki/api/v1/query` |
+| GET/POST | `/api/prom/label` | 🪄 Stub (501) | `/select/logsql/stream_field_names` | |
+| GET/POST | `/api/prom/label/{name}/values` | 🪄 Stub (501) | `/select/logsql/stream_field_values` | |
+| GET/POST | `/api/prom/series` | 🪄 Stub (501) | `/select/logsql/streams` | |
 
 ---
 
@@ -133,9 +133,9 @@ Older Grafana datasource plugin versions use this path prefix.
 | Method | Path | Status | VictoriaLogs equivalent | Notes |
 |--------|------|--------|------------------------|-------|
 | GET | `/healthz` | 🪄 Stub | — | Returns 200; custom compat-layer endpoint |
-| GET | `/ready` | 🔲 Missing | `/health` | Standard Kubernetes readiness probe path |
+| GET | `/ready` | 🪄 Stub (501) | `/health` | Standard Kubernetes readiness probe path |
 | GET | `/metrics` | 🔁 Pass-through | `/metrics` | VL serves Prometheus metrics natively |
-| GET | `/loki/api/v1/status/buildinfo` | 🔲 Missing | *(none)* | Return stub Loki version JSON so clients don't break |
+| GET | `/loki/api/v1/status/buildinfo` | 🪄 Stub (501) | *(none)* | Return stub Loki version JSON so clients don't break |
 
 ---
 
@@ -146,7 +146,7 @@ Older Grafana datasource plugin versions use this path prefix.
 | ✅ Translated | 6 |
 | 🪄 Stub | 2 |
 | 🔁 Pass-through | 1 |
-| 🔲 Missing | 35 |
+| 🪄 Stub (501) | 35 |
 
 ### Recommended implementation order
 
@@ -160,4 +160,4 @@ Older Grafana datasource plugin versions use this path prefix.
 8. **`/loki/api/v1/tail`** + `/api/prom/tail` — live tail support
 9. **`/ready`** + **`/loki/api/v1/status/buildinfo`** — Kubernetes and client compatibility stubs
 10. **`/otlp/v1/logs`** — OTLP ingest path
-11. **Ruler** and **deletion** endpoints — low priority; stub with 501 for now
+11. **Ruler** and **deletion** endpoints — low priority; already stubbed with 501

@@ -10,6 +10,7 @@ import (
 )
 
 const (
+	// Implemented (translated to VictoriaLogs equivalents).
 	volumePath         = "/loki/api/v1/index/volume"
 	volumeRangePath    = "/loki/api/v1/index/volume_range"
 	detectedLabelsPath = "/loki/api/v1/detected_labels"
@@ -18,6 +19,50 @@ const (
 	labelValuesPath    = "/loki/api/v1/label/{name}/values"
 	patternsPath       = "/loki/api/v1/patterns"
 )
+
+// notImplementedPaths lists every Loki API path that the compat layer does not
+// yet translate. Each is registered as 501 Not Implemented so callers get an
+// explicit error rather than a confusing response from VictoriaLogs.
+var notImplementedPaths = []string{
+	// Query
+	"/loki/api/v1/query",
+	"/loki/api/v1/query_range",
+	// Push / ingest
+	"/loki/api/v1/push",
+	"/api/prom/push",
+	"/otlp/v1/logs",
+	// Label metadata
+	"/loki/api/v1/label",
+	"/loki/api/v1/series",
+	// Detected field values
+	"/loki/api/v1/detected_field/{name}/values",
+	// Index
+	"/loki/api/v1/index/stats",
+	"/loki/api/v1/index/shards",
+	// Live tail
+	"/loki/api/v1/tail",
+	"/api/prom/tail",
+	// Ruler / alerting
+	"/loki/api/v1/rules",
+	"/loki/api/v1/rules/{namespace}",
+	"/loki/api/v1/rules/{namespace}/{groupName}",
+	"/prometheus/api/v1/rules",
+	"/prometheus/api/v1/alerts",
+	"/api/prom/rules",
+	"/api/prom/rules/{namespace}",
+	"/api/prom/rules/{namespace}/{groupName}",
+	// Log deletion
+	"/loki/api/v1/delete",
+	"/loki/api/v1/cache/generation_numbers",
+	// Legacy prometheus-compat query API
+	"/api/prom/query",
+	"/api/prom/label",
+	"/api/prom/label/{name}/values",
+	"/api/prom/series",
+	// Management
+	"/ready",
+	"/loki/api/v1/status/buildinfo",
+}
 
 // NewProxy returns an http.Handler that intercepts Loki volume requests and
 // translates them to VictoriaLogs /select/logsql/hits, while passing all other
@@ -54,10 +99,17 @@ func NewProxy(backend *url.URL) http.Handler {
 	})
 	mux.HandleFunc(patternsPath, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"success","data":[]}`))
+		w.Write([]byte(`{"status":"success","data":[]}`)) 
 	})
+	for _, path := range notImplementedPaths {
+		mux.HandleFunc(path, notImplemented)
+	}
 	mux.Handle("/", rp)
 	return mux
+}
+
+func notImplemented(w http.ResponseWriter, _ *http.Request) {
+	http.Error(w, "not implemented", http.StatusNotImplemented)
 }
 
 func handleVolume(w http.ResponseWriter, r *http.Request, backend *url.URL) {
