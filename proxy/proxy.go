@@ -99,12 +99,15 @@ func NewProxy(backend *url.URL) http.Handler {
 	})
 	mux.HandleFunc(patternsPath, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"success","data":[]}`)) 
+		w.Write([]byte(`{"status":"success","data":[]}`))  
 	})
 	for _, path := range notImplementedPaths {
 		mux.HandleFunc(path, notImplemented)
 	}
-	mux.Handle("/", rp)
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("unhandled request: %s %s", r.Method, r.URL.Path)
+		rp.ServeHTTP(w, r)
+	}))
 	return mux
 }
 
