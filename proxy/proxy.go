@@ -17,6 +17,7 @@ const (
 	labelsPath         = "/loki/api/v1/labels"
 	labelValuesPath    = "/loki/api/v1/label/{name}/values"
 	patternsPath       = "/loki/api/v1/patterns"
+	seriesPath         = "/loki/api/v1/series"
 )
 
 // NewProxy returns an http.Handler that intercepts Loki volume requests and
@@ -56,8 +57,22 @@ func NewProxy(backend *url.URL) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"success","data":[]}`))
 	})
+	mux.HandleFunc(seriesPath, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"success","data":[]}`))
+	})
 	mux.Handle("/", rp)
 	return mux
+}
+
+// copyAuthHeaders forwards authentication-related headers from the incoming
+// client request to an outgoing backend request so credentials aren't stripped.
+func copyAuthHeaders(dst, src *http.Request) {
+	for _, h := range []string{"Authorization", "X-Scope-OrgID"} {
+		if v := src.Header.Get(h); v != "" {
+			dst.Header.Set(h, v)
+		}
+	}
 }
 
 func handleVolume(w http.ResponseWriter, r *http.Request, backend *url.URL) {
@@ -72,6 +87,7 @@ func handleVolume(w http.ResponseWriter, r *http.Request, backend *url.URL) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	copyAuthHeaders(hitsReq, r)
 
 	resp, err := http.DefaultClient.Do(hitsReq)
 	if err != nil {
@@ -124,6 +140,7 @@ func handleTranslated(
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	copyAuthHeaders(req, r)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -185,6 +202,7 @@ func handleLabelValues(w http.ResponseWriter, r *http.Request, backend *url.URL)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	copyAuthHeaders(req, r)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
