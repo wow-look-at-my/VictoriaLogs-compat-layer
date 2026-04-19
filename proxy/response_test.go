@@ -195,3 +195,99 @@ func TestConvertHitsToVolumeRange_InvalidJSON(t *testing.T) {
 	_, err := ConvertHitsToVolumeRange([]byte("not json"))
 	assert.NotNil(t, err)
 }
+
+func TestParseStreamSelector(t *testing.T) {
+	assert.Equal(t, map[string]string{}, parseStreamSelector(""))
+	assert.Equal(t, map[string]string{}, parseStreamSelector("{}"))
+
+	m := parseStreamSelector(`{job="nginx"}`)
+	assert.Equal(t, map[string]string{"job": "nginx"}, m)
+
+	m = parseStreamSelector(`{job="nginx",level="info"}`)
+	assert.Equal(t, map[string]string{"job": "nginx", "level": "info"}, m)
+
+	m = parseStreamSelector(`{ job = "nginx" , level = "info" }`)
+	assert.Equal(t, map[string]string{"job": "nginx", "level": "info"}, m)
+
+	m = parseStreamSelector(`{job="quote\"inside"}`)
+	assert.Equal(t, map[string]string{"job": `quote"inside`}, m)
+}
+
+func TestConvertQueryToStreams(t *testing.T) {
+	result, err := ConvertQueryToStreams([]byte(""))
+	require.NoError(t, err)
+	var resp lokiQueryResponse
+	require.NoError(t, json.Unmarshal(result, &resp))
+	assert.Equal(t, "success", resp.Status)
+	assert.Equal(t, "streams", resp.Data.ResultType)
+	assert.Equal(t, 0, len(resp.Data.Result))
+
+	single := `{"_msg":"hello world","_time":"2023-11-14T22:00:00Z","_stream":"{job=\"nginx\"}"}`
+	result, err = ConvertQueryToStreams([]byte(single))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(result, &resp))
+	assert.Equal(t, "success", resp.Status)
+	require.Equal(t, 1, len(resp.Data.Result))
+	assert.Equal(t, "nginx", resp.Data.Result[0].Stream["job"])
+	require.Equal(t, 1, len(resp.Data.Result[0].Values))
+	assert.Equal(t, "hello world", resp.Data.Result[0].Values[0][1])
+
+	multi := `{"_msg":"a","_time":"2023-11-14T22:00:00Z","_stream":"{job=\"nginx\"}"}` + "\n" +
+		`{"_msg":"b","_time":"2023-11-14T22:01:00Z","_stream":"{job=\"app\"}"}` + "\n" +
+		`{"_msg":"c","_time":"2023-11-14T22:02:00Z","_stream":"{job=\"nginx\"}"}`
+	result, err = ConvertQueryToStreams([]byte(multi))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(result, &resp))
+	require.Equal(t, 2, len(resp.Data.Result))
+	assert.Equal(t, "nginx", resp.Data.Result[0].Stream["job"])
+	assert.Equal(t, 2, len(resp.Data.Result[0].Values))
+	assert.Equal(t, "app", resp.Data.Result[1].Stream["job"])
+	assert.Equal(t, 1, len(resp.Data.Result[1].Values))
+}
+
+func TestConvertStreamsToSeries(t *testing.T) {
+	result, err := ConvertStreamsToSeries([]byte(`{"values":[]}`))
+	require.NoError(t, err)
+	var resp lokiSeriesResponse
+	require.NoError(t, json.Unmarshal(result, &resp))
+	assert.Equal(t, "success", resp.Status)
+	assert.Equal(t, 0, len(resp.Data))
+
+	input := `{"values":[{"value":"{job=\"nginx\"}","hits":100}]}`
+	result, err = ConvertStreamsToSeries([]byte(input))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(result, &resp))
+	assert.Equal(t, "success", resp.Status)
+	require.Equal(t, 1, len(resp.Data))
+	assert.Equal(t, "nginx", resp.Data[0]["job"])
+
+	input = `{"values":[{"value":"{job=\"nginx\"}","hits":100},{"value":"{job=\"app\",env=\"prod\"}","hits":50}]}`
+	result, err = ConvertStreamsToSeries([]byte(input))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(result, &resp))
+	require.Equal(t, 2, len(resp.Data))
+	assert.Equal(t, "nginx", resp.Data[0]["job"])
+	assert.Equal(t, "app", resp.Data[1]["job"])
+	assert.Equal(t, "prod", resp.Data[1]["env"])
+}
+
+func TestConvertFieldValuesToDetectedFieldValues(t *testing.T) {
+	input := `{"values":[{"value":"GET","hits":500},{"value":"POST","hits":200},{"value":"DELETE","hits":10}]}`
+	result, err := ConvertFieldValuesToDetectedFieldValues([]byte(input))
+	require.NoError(t, err)
+	var resp lokiDetectedFieldValuesResponse
+	require.NoError(t, json.Unmarshal(result, &resp))
+	assert.Equal(t, []string{"GET", "POST", "DELETE"}, resp.Values)
+}
+
+func TestConvertStatsToIndexStats(t *testing.T) {
+	input := `{"streams":5,"rows":1000,"bytes":204800}`
+	result, err := ConvertStatsToIndexStats([]byte(input))
+	require.NoError(t, err)
+	var resp lokiIndexStatsResponse
+	require.NoError(t, json.Unmarshal(result, &resp))
+	assert.Equal(t, uint64(5), resp.Streams)
+	assert.Equal(t, uint64(1000), resp.Entries)
+	assert.Equal(t, uint64(204800), resp.Bytes)
+	assert.Equal(t, uint64(0), resp.Chunks)
+}
