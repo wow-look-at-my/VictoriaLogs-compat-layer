@@ -215,3 +215,122 @@ func TestBuildHitsRangeRequest_DefaultStep(t *testing.T) {
 	q := req.URL.Query()
 	assert.Equal(t, "1h", q.Get("step"))
 }
+
+func TestBuildQueryRequest(t *testing.T) {
+	backend, _ := url.Parse("http://localhost:9428")
+
+	tests := []struct {
+		name        string
+		params      url.Values
+		wantStart   string
+		wantEnd     string
+		wantLimit   string
+		wantQuery   string
+	}{
+		{
+			name: "basic start/end/limit",
+			params: url.Values{
+				"query": {`{job="test"}`},
+				"start": {"1700000000000000000"},
+				"end":   {"1700003600000000000"},
+				"limit": {"100"},
+			},
+			wantQuery: `_stream:{job="test"}`,
+			wantStart: "2023-11-14T22:13:20Z",
+			wantEnd:   "2023-11-14T23:13:20Z",
+			wantLimit: "100",
+		},
+		{
+			name: "time param used as both start and end",
+			params: url.Values{
+				"query": {`{job="test"}`},
+				"time":  {"1700000000000000000"},
+			},
+			wantQuery: `_stream:{job="test"}`,
+			wantStart: "2023-11-14T22:13:20Z",
+			wantEnd:   "2023-11-14T22:13:20Z",
+		},
+		{
+			name: "limit param",
+			params: url.Values{
+				"query": {`{job="test"}`},
+				"limit": {"500"},
+			},
+			wantQuery: `_stream:{job="test"}`,
+			wantLimit: "500",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := BuildQueryRequest(backend, tt.params)
+			require.Nil(t, err)
+
+			assert.Equal(t, "/select/logsql/query", req.URL.Path)
+			q := req.URL.Query()
+			assert.Equal(t, tt.wantQuery, q.Get("query"))
+			if tt.wantStart != "" {
+				assert.Equal(t, tt.wantStart, q.Get("start"))
+			}
+			if tt.wantEnd != "" {
+				assert.Equal(t, tt.wantEnd, q.Get("end"))
+			}
+			if tt.wantLimit != "" {
+				assert.Equal(t, tt.wantLimit, q.Get("limit"))
+			}
+		})
+	}
+}
+
+func TestBuildStreamsRequest(t *testing.T) {
+	backend, _ := url.Parse("http://localhost:9428")
+	params := url.Values{
+		"query": {`{job="test"}`},
+		"start": {"1700000000000000000"},
+		"end":   {"1700003600000000000"},
+	}
+
+	req, err := BuildStreamsRequest(backend, params)
+	require.Nil(t, err)
+
+	assert.Equal(t, "/select/logsql/streams", req.URL.Path)
+	q := req.URL.Query()
+	assert.Equal(t, `_stream:{job="test"}`, q.Get("query"))
+	assert.Equal(t, "2023-11-14T22:13:20Z", q.Get("start"))
+	assert.Equal(t, "2023-11-14T23:13:20Z", q.Get("end"))
+}
+
+func TestBuildFieldValuesRequest(t *testing.T) {
+	backend, _ := url.Parse("http://localhost:9428")
+	params := url.Values{
+		"query": {`{job="test"}`},
+		"start": {"1700000000000000000"},
+		"end":   {"1700003600000000000"},
+	}
+
+	req, err := BuildFieldValuesRequest(backend, params, "level")
+	require.Nil(t, err)
+
+	assert.Equal(t, "/select/logsql/field_values", req.URL.Path)
+	q := req.URL.Query()
+	assert.Equal(t, `_stream:{job="test"}`, q.Get("query"))
+	assert.Equal(t, "level", q.Get("field"))
+}
+
+func TestBuildStatsRequest(t *testing.T) {
+	backend, _ := url.Parse("http://localhost:9428")
+	params := url.Values{
+		"query": {`{job="test"}`},
+		"start": {"1700000000000000000"},
+		"end":   {"1700003600000000000"},
+	}
+
+	req, err := BuildStatsRequest(backend, params)
+	require.Nil(t, err)
+
+	assert.Equal(t, "/select/logsql/stats", req.URL.Path)
+	q := req.URL.Query()
+	assert.Equal(t, `_stream:{job="test"}`, q.Get("query"))
+	assert.Equal(t, "2023-11-14T22:13:20Z", q.Get("start"))
+	assert.Equal(t, "2023-11-14T23:13:20Z", q.Get("end"))
+}

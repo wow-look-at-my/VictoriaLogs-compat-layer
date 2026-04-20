@@ -212,3 +212,61 @@ func BuildHitsRequest(backend *url.URL, lokiParams url.Values) (*http.Request, e
 	}
 	return req, nil
 }
+
+func BuildQueryRequest(backend *url.URL, lokiParams url.Values) (*http.Request, error) {
+	q := url.Values{}
+	q.Set("query", TranslateQuery(lokiParams.Get("query")))
+
+	if t := lokiParams.Get("time"); t != "" {
+		ts, err := TranslateTimestamp(t)
+		if err != nil {
+			return nil, fmt.Errorf("time: %w", err)
+		}
+		q.Set("start", ts)
+		q.Set("end", ts)
+	} else {
+		if start := lokiParams.Get("start"); start != "" {
+			ts, err := TranslateTimestamp(start)
+			if err != nil {
+				return nil, fmt.Errorf("start: %w", err)
+			}
+			q.Set("start", ts)
+		}
+		if end := lokiParams.Get("end"); end != "" {
+			ts, err := TranslateTimestamp(end)
+			if err != nil {
+				return nil, fmt.Errorf("end: %w", err)
+			}
+			q.Set("end", ts)
+		}
+	}
+
+	if limit := lokiParams.Get("limit"); limit != "" {
+		q.Set("limit", limit)
+	}
+
+	u := *backend
+	u.Path = "/select/logsql/query"
+	u.RawQuery = q.Encode()
+
+	return http.NewRequest(http.MethodGet, u.String(), nil)
+}
+
+func BuildStreamsRequest(backend *url.URL, lokiParams url.Values) (*http.Request, error) {
+	return buildSimpleRequest(backend, lokiParams, "/select/logsql/streams")
+}
+
+func BuildFieldValuesRequest(backend *url.URL, lokiParams url.Values, fieldName string) (*http.Request, error) {
+	req, err := buildSimpleRequest(backend, lokiParams, "/select/logsql/field_values")
+	if err != nil {
+		return nil, err
+	}
+	q := req.URL.Query()
+	q.Set("field", fieldName)
+	req.URL.RawQuery = q.Encode()
+	return req, nil
+}
+
+func BuildStatsRequest(backend *url.URL, lokiParams url.Values) (*http.Request, error) {
+	return buildSimpleRequest(backend, lokiParams, "/select/logsql/stats")
+}
