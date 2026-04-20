@@ -156,6 +156,16 @@ func NewProxy(backend *url.URL) http.Handler {
 	return mux
 }
 
+// copyAuthHeaders forwards authentication-related headers from the incoming
+// client request to an outgoing backend request so credentials aren't stripped.
+func copyAuthHeaders(dst, src *http.Request) {
+	for _, h := range []string{"Authorization", "X-Scope-OrgID"} {
+		if v := src.Header.Get(h); v != "" {
+			dst.Header.Set(h, v)
+		}
+	}
+}
+
 func notImplemented(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, "not implemented", http.StatusNotImplemented)
 }
@@ -172,6 +182,7 @@ func handleVolume(w http.ResponseWriter, r *http.Request, backend *url.URL) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	copyAuthHeaders(hitsReq, r)
 
 	resp, err := http.DefaultClient.Do(hitsReq)
 	if err != nil {
@@ -224,6 +235,7 @@ func handleTranslated(
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	copyAuthHeaders(req, r)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -285,6 +297,7 @@ func handleLabelValues(w http.ResponseWriter, r *http.Request, backend *url.URL)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	copyAuthHeaders(req, r)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -338,6 +351,7 @@ func handleDetectedFieldValues(w http.ResponseWriter, r *http.Request, backend *
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	copyAuthHeaders(req, r)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
