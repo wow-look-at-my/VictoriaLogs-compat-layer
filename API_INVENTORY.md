@@ -16,8 +16,8 @@ The core read path. Used by Grafana Explore, dashboards, and logcli.
 
 | Method | Path | Status | VictoriaLogs equivalent | Notes |
 |--------|------|--------|------------------------|-------|
-| GET/POST | `/loki/api/v1/query_range` | 🪄 Stub (501) | `/select/logsql/query` | Range query — the most-used Grafana endpoint |
-| GET/POST | `/loki/api/v1/query` | 🪄 Stub (501) | `/select/logsql/query` | Instant query |
+| GET/POST | `/loki/api/v1/query_range` | ✅ Translated | `/select/logsql/query` | Range query — the most-used Grafana endpoint |
+| GET/POST | `/loki/api/v1/query` | ✅ Translated | `/select/logsql/query` | Instant query |
 
 ---
 
@@ -25,9 +25,9 @@ The core read path. Used by Grafana Explore, dashboards, and logcli.
 
 | Method | Path | Status | VictoriaLogs equivalent | Notes |
 |--------|------|--------|------------------------|-------|
-| POST | `/loki/api/v1/push` | 🪄 Stub (501) | `/insert/loki/api/v1/push` | VL path prefix differs from Loki |
-| POST | `/api/prom/push` | 🪄 Stub (501) | `/insert/loki/api/v1/push` | Legacy push path |
-| POST | `/otlp/v1/logs` | 🪄 Stub (501) | `/insert/opentelemetry/api/logs/export` | OTLP ingest |
+| POST | `/loki/api/v1/push` | ✅ Translated | `/insert/loki/api/v1/push` | Path-rewrite proxy |
+| POST | `/api/prom/push` | ✅ Translated | `/insert/loki/api/v1/push` | Legacy push path |
+| POST | `/otlp/v1/logs` | ✅ Translated | `/insert/opentelemetry/api/logs/export` | OTLP ingest |
 
 ---
 
@@ -36,9 +36,9 @@ The core read path. Used by Grafana Explore, dashboards, and logcli.
 | Method | Path | Status | VictoriaLogs equivalent | Notes |
 |--------|------|--------|------------------------|-------|
 | GET/POST | `/loki/api/v1/labels` | ✅ Translated | `/select/logsql/stream_field_names` | |
-| GET/POST | `/loki/api/v1/label` | 🪄 Stub (501) | `/select/logsql/stream_field_names` | Alias for `/labels`; separate constant in Loki |
+| GET/POST | `/loki/api/v1/label` | ✅ Translated | `/select/logsql/stream_field_names` | Alias for `/labels` |
 | GET/POST | `/loki/api/v1/label/{name}/values` | ✅ Translated | `/select/logsql/stream_field_values` | |
-| GET/POST | `/loki/api/v1/series` | 🪄 Stub (501) | `/select/logsql/streams` | Returns matching log streams |
+| GET/POST | `/loki/api/v1/series` | ✅ Translated | `/select/logsql/streams` | Returns matching log streams |
 
 ---
 
@@ -50,7 +50,7 @@ Used by Grafana Logs Drilldown.
 |--------|------|--------|------------------------|-------|
 | GET/POST | `/loki/api/v1/detected_labels` | ✅ Translated | `/select/logsql/field_names` | |
 | GET/POST | `/loki/api/v1/detected_fields` | ✅ Translated | `/select/logsql/field_names` | |
-| GET/POST | `/loki/api/v1/detected_field/{name}/values` | 🪄 Stub (501) | `/select/logsql/field_values` | Per-field value enumeration |
+| GET/POST | `/loki/api/v1/detected_field/{name}/values` | ✅ Translated | `/select/logsql/field_values` | Per-field value enumeration |
 
 ---
 
@@ -60,7 +60,7 @@ Used by Grafana Logs Drilldown.
 |--------|------|--------|------------------------|-------|
 | GET/POST | `/loki/api/v1/index/volume` | ✅ Translated | `/select/logsql/hits` | Single-bucket volume |
 | GET/POST | `/loki/api/v1/index/volume_range` | ✅ Translated | `/select/logsql/hits` | Time-series volume |
-| GET/POST | `/loki/api/v1/index/stats` | 🪄 Stub (501) | `/select/logsql/stats` | Byte/chunk/entry counts |
+| GET/POST | `/loki/api/v1/index/stats` | ✅ Translated | `/select/logsql/stats` | Byte/chunk/entry counts |
 | GET/POST | `/loki/api/v1/index/shards` | 🪄 Stub (501) | *(no VL equivalent)* | Query sharding hint; can return stub |
 
 ---
@@ -121,10 +121,10 @@ Older Grafana datasource plugin versions use this path prefix.
 
 | Method | Path | Status | VictoriaLogs equivalent | Notes |
 |--------|------|--------|------------------------|-------|
-| GET/POST | `/api/prom/query` | 🪄 Stub (501) | `/select/logsql/query` | Same semantics as `/loki/api/v1/query` |
-| GET/POST | `/api/prom/label` | 🪄 Stub (501) | `/select/logsql/stream_field_names` | |
-| GET/POST | `/api/prom/label/{name}/values` | 🪄 Stub (501) | `/select/logsql/stream_field_values` | |
-| GET/POST | `/api/prom/series` | 🪄 Stub (501) | `/select/logsql/streams` | |
+| GET/POST | `/api/prom/query` | ✅ Translated | `/select/logsql/query` | Same semantics as `/loki/api/v1/query` |
+| GET/POST | `/api/prom/label` | ✅ Translated | `/select/logsql/stream_field_names` | |
+| GET/POST | `/api/prom/label/{name}/values` | ✅ Translated | `/select/logsql/stream_field_values` | |
+| GET/POST | `/api/prom/series` | ✅ Translated | `/select/logsql/streams` | |
 
 ---
 
@@ -133,9 +133,9 @@ Older Grafana datasource plugin versions use this path prefix.
 | Method | Path | Status | VictoriaLogs equivalent | Notes |
 |--------|------|--------|------------------------|-------|
 | GET | `/healthz` | 🪄 Stub | — | Returns 200; custom compat-layer endpoint |
-| GET | `/ready` | 🪄 Stub (501) | `/health` | Standard Kubernetes readiness probe path |
+| GET | `/ready` | 🪄 Stub | `/health` | Returns 200 OK |
 | GET | `/metrics` | 🔁 Pass-through | `/metrics` | VL serves Prometheus metrics natively |
-| GET | `/loki/api/v1/status/buildinfo` | 🪄 Stub (501) | *(none)* | Return stub Loki version JSON so clients don't break |
+| GET | `/loki/api/v1/status/buildinfo` | 🪄 Stub | *(none)* | Returns stub Loki version JSON |
 
 ---
 
@@ -143,21 +143,7 @@ Older Grafana datasource plugin versions use this path prefix.
 
 | Status | Count |
 |--------|-------|
-| ✅ Translated | 6 |
-| 🪄 Stub | 2 |
+| ✅ Translated | 20 |
+| 🪄 Stub | 4 |
 | 🔁 Pass-through | 1 |
-| 🪄 Stub (501) | 35 |
-
-### Recommended implementation order
-
-1. **`/loki/api/v1/query_range`** and **`/loki/api/v1/query`** — without these, Grafana dashboards and Explore show no data
-2. **`/loki/api/v1/push`** — without this, no logs can be ingested via the compat layer
-3. **`/loki/api/v1/series`** — required by Grafana label browser
-4. **`/loki/api/v1/label`** (alias) — Grafana sometimes hits this instead of `/labels`
-5. **`/loki/api/v1/detected_field/{name}/values`** — Drilldown completeness
-6. **`/loki/api/v1/index/stats`** — used for query planning display in Grafana
-7. **`/api/prom/*`** legacy block — needed for older datasource plugin versions
-8. **`/loki/api/v1/tail`** + `/api/prom/tail` — live tail support
-9. **`/ready`** + **`/loki/api/v1/status/buildinfo`** — Kubernetes and client compatibility stubs
-10. **`/otlp/v1/logs`** — OTLP ingest path
-11. **Ruler** and **deletion** endpoints — low priority; already stubbed with 501
+| 🪄 Stub (501) | 17 |

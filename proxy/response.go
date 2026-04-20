@@ -1,8 +1,10 @@
 package proxy
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -216,4 +218,203 @@ func ConvertHitsToVolume(hitsBody []byte, queryTime time.Time) ([]byte, error) {
 	}
 
 	return json.Marshal(resp)
+}
+
+// vlQueryEntry is a single entry from VictoriaLogs NDJSON query response.
+type vlQueryEntry struct {
+	Msg    string `json:"_msg"`
+	Time   string `json:"_time"`
+	Stream string `json:"_stream"`
+}
+
+// lokiQueryResponse is the Loki query/query_range response format.
+type lokiQueryResponse struct {
+	Status string        `json:"status"`
+	Data   lokiQueryData `json:"data"`
+}
+
+type lokiQueryData struct {
+	ResultType string             `json:"resultType"`
+	Result     []lokiStreamResult `json:"result"`
+}
+
+type lokiStreamResult struct {
+	Stream map[string]string `json:"stream"`
+	Values [][2]string       `json:"values"`
+}
+
+// lokiSeriesResponse is the Loki /loki/api/v1/series response format.
+type lokiSeriesResponse struct {
+	Status string              `json:"status"`
+	Data   []map[string]string `json:"data"`
+}
+
+// lokiDetectedFieldValuesResponse is the Loki detected_field/{name}/values response format.
+type lokiDetectedFieldValuesResponse struct {
+	Values []string `json:"values"`
+}
+
+// vlStatsResponse is the VictoriaLogs /select/logsql/stats response format.
+type vlStatsResponse struct {
+	Streams uint64 `json:"streams"`
+	Rows    uint64 `json:"rows"`
+	Bytes   uint64 `json:"bytes"`
+}
+
+// lokiIndexStatsResponse is the Loki /loki/api/v1/index/stats response format.
+type lokiIndexStatsResponse struct {
+	Streams uint64 `json:"streams"`
+	Chunks  uint64 `json:"chunks"`
+	Entries uint64 `json:"entries"`
+	Bytes   uint64 `json:"bytes"`
+}
+
+// parseStreamSelector parses a VictoriaLogs stream selector like
+// {job="nginx",level="info"} into a map.
+func parseStreamSelector(selector string) map[string]string {
+	result := make(map[string]string)
+	s := strings.TrimSpace(selector)
+	if !strings.HasPrefix(s, "{") || !strings.HasSuffix(s, "}") {
+		return result
+	}
+	s = s[1 : len(s)-1]
+	for len(s) > 0 {
+		s = strings.TrimSpace(s)
+		if len(s) == 0 {
+			break
+		}
+		eq := strings.IndexByte(s, '=')
+		if eq < 0 {
+			break
+		}
+		key := strings.TrimSpace(s[:eq])
+		s = strings.TrimSpace(s[eq+1:])
+		if len(s) == 0 || s[0] != '"' {
+			break
+		}
+		// Scan quoted value with backslash escape support.
+		var val strings.Builder
+		i := 1
+		for i < len(s) {
+			c := s[i]
+			if c == '\\' && i+1 < len(s) {
+				val.WriteByte(s[i+1])
+				i += 2
+				continue
+			}
+			if c == '"' {
+				i++
+				break
+			}
+			val.WriteByte(c)
+			i++
+		}
+		result[key] = val.String()
+		s = s[i:]
+		s = strings.TrimSpace(s)
+		if strings.HasPrefix(s, ",") {
+			s = s[1:]
+		}
+	}
+	return result
+}
+
+// ConvertQueryToStreams converts a VictoriaLogs NDJSON query response to a
+// Loki streams response.
+func ConvertQueryToStreams(body []byte) ([]byte, error) {
+	if len(bytes.TrimSpace(body)) == 0 {
+		return json.Marshal(lokiQueryResponse{
+			Status: "success",
+			Data:   lokiQueryData{ResultType: "streams", Result: []lokiStreamResult{}},
+		})
+	}
+
+	// groups maps stream selector string → index in results slice, preserving
+	// insertion order via results.
+	groups := map[string]int{}
+	results := []lokiStreamResult{}
+
+	for _, line := range bytes.Split(body, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		var entry vlQueryEntry
+		if err := json.Unmarshal(line, &entry); err != nil {
+			return nil, fmt.Errorf("unmarshal query entry: %w", err)
+		}
+		t, err := time.Parse(time.RFC3339Nano, entry.Time)
+		if err != nil {
+			// Fall back to RFC3339 without sub-seconds.
+			t, err = time.Parse(time.RFC3339, entry.Time)
+			if err != nil {
+				return nil, fmt.Errorf("parse _time %q: %w", entry.Time, err)
+			}
+		}
+		nsStr := fmt.Sprintf("%d", t.UnixNano())
+
+		idx, ok := groups[entry.Stream]
+		if !ok {
+			idx = len(results)
+			groups[entry.Stream] = idx
+			results = append(results, lokiStreamResult{
+				Stream: parseStreamSelector(entry.Stream),
+				Values: [][2]string{},
+			})
+		}
+		results[idx].Values = append(results[idx].Values, [2]string{nsStr, entry.Msg})
+	}
+
+	return json.Marshal(lokiQueryResponse{
+		Status: "success",
+		Data:   lokiQueryData{ResultType: "streams", Result: results},
+	})
+}
+
+// ConvertStreamsToSeries converts a VictoriaLogs /select/logsql/streams
+// response to a Loki series response.
+func ConvertStreamsToSeries(body []byte) ([]byte, error) {
+	var fn fieldNamesResponse
+	if err := json.Unmarshal(body, &fn); err != nil {
+		return nil, fmt.Errorf("unmarshal streams: %w", err)
+	}
+
+	data := make([]map[string]string, 0, len(fn.Values))
+	for _, e := range fn.Values {
+		data = append(data, parseStreamSelector(e.Value))
+	}
+
+	return json.Marshal(lokiSeriesResponse{Status: "success", Data: data})
+}
+
+// ConvertFieldValuesToDetectedFieldValues converts a VictoriaLogs
+// /select/logsql/field_values response to a Loki detected field values response.
+func ConvertFieldValuesToDetectedFieldValues(body []byte) ([]byte, error) {
+	var fn fieldNamesResponse
+	if err := json.Unmarshal(body, &fn); err != nil {
+		return nil, fmt.Errorf("unmarshal field_values: %w", err)
+	}
+
+	values := make([]string, 0, len(fn.Values))
+	for _, e := range fn.Values {
+		values = append(values, e.Value)
+	}
+
+	return json.Marshal(lokiDetectedFieldValuesResponse{Values: values})
+}
+
+// ConvertStatsToIndexStats converts a VictoriaLogs /select/logsql/stats
+// response to a Loki index stats response.
+func ConvertStatsToIndexStats(body []byte) ([]byte, error) {
+	var s vlStatsResponse
+	if err := json.Unmarshal(body, &s); err != nil {
+		return nil, fmt.Errorf("unmarshal stats: %w", err)
+	}
+
+	return json.Marshal(lokiIndexStatsResponse{
+		Streams: s.Streams,
+		Chunks:  0,
+		Entries: s.Rows,
+		Bytes:   s.Bytes,
+	})
 }
