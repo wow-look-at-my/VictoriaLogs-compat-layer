@@ -24,3 +24,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: wow-look-at-my/actions@go-packages#latest
+        with:
+          image: ghcr.io/wow-look-at-my/victorialogs-compat-layer
