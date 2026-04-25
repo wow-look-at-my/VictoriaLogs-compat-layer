@@ -98,32 +98,22 @@ func NewProxy(backend *url.URL) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"success","data":[]}`))
 	})
+	drilldownLimits, _ := json.Marshal(lokiDrilldownLimits{
+		Version:                "unknown",
+		PatternIngesterEnabled: false,
+		Limits: lokiDrilldownInnerLimit{
+			RetentionPeriod:         "0s",
+			MaxQueryLength:          "0s",
+			MaxQueryLookback:        "0s",
+			MaxQueryRange:           "0s",
+			QueryTimeout:            "0s",
+			VolumeEnabled:           true,
+			DiscoverLogLevels:       true,
+		},
+	})
 	mux.HandleFunc(drilldownLimitsPath, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		// Shape mirrors grafana/logs-drilldown's LokiConfig type. All numeric
-		// and duration limits use 0 / "0s" — verified against
-		// timePicker.ts:filterInvalidTimeOptions which falsy-checks the value
-		// before applying the gate, so 0 means "unlimited" rather than "zero".
-		// pattern_ingester_enabled is false because VL has no pattern ingester
-		// (matches our /loki/api/v1/patterns stub returning an empty list).
-		w.Write([]byte(`{` +
-			`"version":"unknown",` +
-			`"pattern_ingester_enabled":false,` +
-			`"limits":{` +
-			`"retention_period":"0s",` +
-			`"max_query_series":0,` +
-			`"max_query_length":"0s",` +
-			`"max_query_lookback":"0s",` +
-			`"max_query_range":"0s",` +
-			`"max_query_bytes_read":0,` +
-			`"max_entries_limit_per_query":0,` +
-			`"query_timeout":"0s",` +
-			`"volume_enabled":true,` +
-			`"volume_max_series":0,` +
-			`"metric_aggregation_enabled":false,` +
-			`"pattern_persistence_enabled":false,` +
-			`"discover_log_levels":true` +
-			`}}`))
+		w.Write(drilldownLimits)
 	})
 	mux.HandleFunc(queryPath, func(w http.ResponseWriter, r *http.Request) {
 		handleQuery(w, r, backend)
