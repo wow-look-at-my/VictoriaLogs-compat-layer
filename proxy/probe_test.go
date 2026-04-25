@@ -24,11 +24,34 @@ func TestDrilldownLimitsEndpoint(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
-	var limits map[string]interface{}
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &limits))
-	assert.NotNil(t, limits["max_query_series"])
-	assert.NotEmpty(t, limits["max_query_length"])
-	assert.NotEmpty(t, limits["max_query_lookback"])
+	var cfg struct {
+		Version                string `json:"version"`
+		PatternIngesterEnabled bool   `json:"pattern_ingester_enabled"`
+		Limits                 struct {
+			RetentionPeriod         string `json:"retention_period"`
+			MaxQuerySeries          int    `json:"max_query_series"`
+			MaxQueryLength          string `json:"max_query_length"`
+			MaxQueryLookback        string `json:"max_query_lookback"`
+			MaxQueryRange           string `json:"max_query_range"`
+			MaxEntriesLimitPerQuery int    `json:"max_entries_limit_per_query"`
+			VolumeEnabled           bool   `json:"volume_enabled"`
+		} `json:"limits"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &cfg))
+
+	// Limits live under "limits" — that's the shape Drilldown reads.
+	// Zero/0s mean "unlimited"; verified in timePicker.ts (the falsy check
+	// in filterInvalidTimeOptions skips the gate entirely).
+	assert.Equal(t, "0s", cfg.Limits.RetentionPeriod)
+	assert.Equal(t, 0, cfg.Limits.MaxQuerySeries)
+	assert.Equal(t, "0s", cfg.Limits.MaxQueryLength)
+	assert.Equal(t, "0s", cfg.Limits.MaxQueryLookback)
+
+	// Patterns aren't supported by VL.
+	assert.False(t, cfg.PatternIngesterEnabled)
+
+	// We do translate volume/volume_range, so leave volume_enabled true.
+	assert.True(t, cfg.Limits.VolumeEnabled)
 }
 
 // failingBackend returns a backend that fails the test if it ever gets a

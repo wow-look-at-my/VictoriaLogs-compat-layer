@@ -51,7 +51,7 @@ Used by Grafana Logs Drilldown.
 | GET/POST | `/loki/api/v1/detected_labels` | ✅ Translated | `/select/logsql/field_names` | |
 | GET/POST | `/loki/api/v1/detected_fields` | ✅ Translated | `/select/logsql/field_names` | |
 | GET/POST | `/loki/api/v1/detected_field/{name}/values` | ✅ Translated | `/select/logsql/field_values` | Per-field value enumeration |
-| GET | `/loki/api/v1/drilldown-limits` | 🪄 Stub | *(none)* | Returns hardcoded limits so Logs Drilldown can render. |
+| GET | `/loki/api/v1/drilldown-limits` | 🪄 Stub | *(none)* | Returns the LokiConfig shape grafana/logs-drilldown expects (`{version, pattern_ingester_enabled, limits:{...}}`). All numeric/duration limits are 0/`"0s"` — verified in `timePicker.ts` to mean "unlimited", not "zero". |
 
 ---
 
