@@ -269,6 +269,31 @@ type lokiIndexStatsResponse struct {
 	Bytes   uint64 `json:"bytes"`
 }
 
+// lokiDrilldownLimits mirrors grafana/logs-drilldown's LokiConfig type.
+// The plugin reads `limits` for time-range filtering; numeric/duration values
+// of 0 / "0s" are treated as "unlimited" (verified in timePicker.ts).
+type lokiDrilldownLimits struct {
+	Version                string                  `json:"version"`
+	PatternIngesterEnabled bool                    `json:"pattern_ingester_enabled"`
+	Limits                 lokiDrilldownInnerLimit `json:"limits"`
+}
+
+type lokiDrilldownInnerLimit struct {
+	RetentionPeriod           string `json:"retention_period"`
+	MaxQuerySeries            int    `json:"max_query_series"`
+	MaxQueryLength            string `json:"max_query_length"`
+	MaxQueryLookback          string `json:"max_query_lookback"`
+	MaxQueryRange             string `json:"max_query_range"`
+	MaxQueryBytesRead         int    `json:"max_query_bytes_read"`
+	MaxEntriesLimitPerQuery   int    `json:"max_entries_limit_per_query"`
+	QueryTimeout              string `json:"query_timeout"`
+	VolumeEnabled             bool   `json:"volume_enabled"`
+	VolumeMaxSeries           int    `json:"volume_max_series"`
+	MetricAggregationEnabled  bool   `json:"metric_aggregation_enabled"`
+	PatternPersistenceEnabled bool   `json:"pattern_persistence_enabled"`
+	DiscoverLogLevels         bool   `json:"discover_log_levels"`
+}
+
 // parseStreamSelector parses a VictoriaLogs stream selector like
 // {job="nginx",level="info"} into a map.
 func parseStreamSelector(selector string) map[string]string {

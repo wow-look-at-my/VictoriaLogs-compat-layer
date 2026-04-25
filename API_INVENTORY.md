@@ -16,8 +16,8 @@ The core read path. Used by Grafana Explore, dashboards, and logcli.
 
 | Method | Path | Status | VictoriaLogs equivalent | Notes |
 |--------|------|--------|------------------------|-------|
-| GET/POST | `/loki/api/v1/query_range` | ✅ Translated | `/select/logsql/query` | Range query — the most-used Grafana endpoint |
-| GET/POST | `/loki/api/v1/query` | ✅ Translated | `/select/logsql/query` | Instant query |
+| GET/POST | `/loki/api/v1/query_range` | ✅ Translated | `/select/logsql/query` | Range query — the most-used Grafana endpoint. Synthetic Prometheus liveness probes (no `{`) are short-circuited with an empty success response and never reach VL. |
+| GET/POST | `/loki/api/v1/query` | ✅ Translated | `/select/logsql/query` | Instant query. Same probe short-circuit as `query_range`. |
 
 ---
 
@@ -51,6 +51,7 @@ Used by Grafana Logs Drilldown.
 | GET/POST | `/loki/api/v1/detected_labels` | ✅ Translated | `/select/logsql/field_names` | |
 | GET/POST | `/loki/api/v1/detected_fields` | ✅ Translated | `/select/logsql/field_names` | |
 | GET/POST | `/loki/api/v1/detected_field/{name}/values` | ✅ Translated | `/select/logsql/field_values` | Per-field value enumeration |
+| GET | `/loki/api/v1/drilldown-limits` | 🪄 Stub | *(none)* | Returns the LokiConfig shape grafana/logs-drilldown expects (`{version, pattern_ingester_enabled, limits:{...}}`). All numeric/duration limits are 0/`"0s"` — verified in `timePicker.ts` to mean "unlimited", not "zero". |
 
 ---
 
@@ -144,6 +145,6 @@ Older Grafana datasource plugin versions use this path prefix.
 | Status | Count |
 |--------|-------|
 | ✅ Translated | 20 |
-| 🪄 Stub | 4 |
+| 🪄 Stub | 5 |
 | 🔁 Pass-through | 1 |
 | 🪄 Stub (501) | 17 |

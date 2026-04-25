@@ -1,11 +1,14 @@
 package proxy
 
 import (
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -35,6 +38,7 @@ const (
 	buildinfoPath           = "/loki/api/v1/status/buildinfo"
 	tailPath                = "/loki/api/v1/tail"
 	promTailPath            = "/api/prom/tail"
+	drilldownLimitsPath     = "/loki/api/v1/drilldown-limits"
 )
 
 // notImplementedPaths lists every Loki API path that the compat layer does not
@@ -93,6 +97,23 @@ func NewProxy(backend *url.URL) http.Handler {
 	mux.HandleFunc(patternsPath, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"success","data":[]}`))
+	})
+	drilldownLimits, _ := json.Marshal(lokiDrilldownLimits{
+		Version:                "unknown",
+		PatternIngesterEnabled: false,
+		Limits: lokiDrilldownInnerLimit{
+			RetentionPeriod:         "0s",
+			MaxQueryLength:          "0s",
+			MaxQueryLookback:        "0s",
+			MaxQueryRange:           "0s",
+			QueryTimeout:            "0s",
+			VolumeEnabled:           true,
+			DiscoverLogLevels:       true,
+		},
+	})
+	mux.HandleFunc(drilldownLimitsPath, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(drilldownLimits)
 	})
 	mux.HandleFunc(queryPath, func(w http.ResponseWriter, r *http.Request) {
 		handleQuery(w, r, backend)
@@ -330,8 +351,117 @@ func handleLabelValues(w http.ResponseWriter, r *http.Request, backend *url.URL)
 	w.Write(result)
 }
 
+// isProbeQuery detects synthetic Prometheus liveness-probe queries (e.g.
+// "vector(1)+vector(1)") that Grafana's Loki datasource health check sends.
+// A real LogQL query always contains a stream selector "{...}"; queries with
+// no '{' aren't LogQL — they're constant Prometheus expressions evaluated
+// locally so they don't hit VL.
+func isProbeQuery(q string) bool {
+	s := strings.TrimSpace(q)
+	return s != "" && !strings.Contains(s, "{")
+}
+
 func handleQuery(w http.ResponseWriter, r *http.Request, backend *url.URL) {
+	params, err := extractParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if isProbeQuery(params.Get("query")) {
+		writeProbeResponse(w, r, params)
+		return
+	}
 	handleTranslated(w, r, backend, BuildQueryRequest, ConvertQueryToStreams)
+}
+
+// writeProbeResponse evaluates a constant Prometheus probe query and writes a
+// Prometheus-shaped response — vector for /query, matrix for /query_range.
+// If the expression isn't in the subset we can evaluate, return 501 so the
+// gap is visible rather than masked by a fake empty result.
+func writeProbeResponse(w http.ResponseWriter, r *http.Request, params url.Values) {
+	q := params.Get("query")
+	v, ok := evalProbe(q)
+	if !ok {
+		http.Error(w, "probe query not implemented: "+q, http.StatusNotImplemented)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	valStr := strconv.FormatFloat(v, 'f', -1, 64)
+
+	if strings.HasSuffix(r.URL.Path, "/query_range") {
+		samples := probeRangeSamples(params)
+		results := make([]lokiVolumeRangeResult, 1)
+		results[0].Metric = map[string]string{}
+		results[0].Values = make([][2]interface{}, len(samples))
+		for i, ts := range samples {
+			results[0].Values[i] = [2]interface{}{float64(ts), valStr}
+		}
+		body, _ := json.Marshal(lokiVolumeRangeResponse{
+			Status: "success",
+			Data:   lokiVolumeRangeData{ResultType: "matrix", Result: results},
+		})
+		w.Write(body)
+		return
+	}
+
+	ts := probeInstantSample(params)
+	body, _ := json.Marshal(lokiVolumeResponse{
+		Status: "success",
+		Data: lokiVolumeData{
+			ResultType: "vector",
+			Result: []lokiVolumeResult{{
+				Metric: map[string]string{},
+				Value:  [2]interface{}{float64(ts), valStr},
+			}},
+		},
+	})
+	w.Write(body)
+}
+
+// probeInstantSample picks the timestamp for an instant-query probe response:
+// the request's `time` param, falling back to `start`, falling back to now.
+func probeInstantSample(params url.Values) int64 {
+	for _, key := range []string{"time", "start"} {
+		if raw := params.Get(key); raw != "" {
+			if t, err := parseTimestamp(raw); err == nil {
+				return t.Unix()
+			}
+		}
+	}
+	return time.Now().Unix()
+}
+
+// probeRangeSamples produces the timestamps to sample at for a range probe.
+// Walks from start to end in `step` increments (default 15s, capped at 11
+// points to keep the response tiny), or falls back to a single now-sample.
+func probeRangeSamples(params url.Values) []int64 {
+	start, errS := parseTimestamp(params.Get("start"))
+	end, errE := parseTimestamp(params.Get("end"))
+	if errS != nil || errE != nil || !end.After(start) {
+		return []int64{time.Now().Unix()}
+	}
+
+	step := 15 * time.Second
+	if raw := params.Get("step"); raw != "" {
+		if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+			step = d
+		} else if secs, err := strconv.ParseFloat(raw, 64); err == nil && secs > 0 {
+			step = time.Duration(secs * float64(time.Second))
+		}
+	}
+
+	const maxPoints = 11
+	span := end.Sub(start)
+	if step < span/maxPoints {
+		step = span / maxPoints
+	}
+
+	out := make([]int64, 0, maxPoints+1)
+	for t := start; !t.After(end) && len(out) <= maxPoints; t = t.Add(step) {
+		out = append(out, t.Unix())
+	}
+	return out
 }
 
 func handleSeries(w http.ResponseWriter, r *http.Request, backend *url.URL) {
