@@ -111,8 +111,8 @@ func TestPromQueryEndpoint_PromProbe(t *testing.T) {
 }
 
 func TestQueryEndpoint_UnparseableProbe(t *testing.T) {
-	// A probe-shaped query (no '{') we can't parse must still return a 200
-	// success with an empty result, never reach the backend.
+	// A probe-shaped query (no '{') we can't actually evaluate must surface
+	// as 501 so the gap is visible. It still must not reach the backend.
 	backend := failingBackend(t)
 	defer backend.Close()
 
@@ -125,12 +125,8 @@ func TestQueryEndpoint_UnparseableProbe(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	assert.Equal(t, http.StatusOK, rec.Code)
-	var resp lokiVolumeResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Equal(t, "success", resp.Status)
-	assert.Equal(t, "vector", resp.Data.ResultType)
-	assert.Equal(t, 0, len(resp.Data.Result))
+	assert.Equal(t, http.StatusNotImplemented, rec.Code)
+	assert.Contains(t, rec.Body.String(), "some_unknown_func")
 }
 
 func TestIsProbeQuery(t *testing.T) {

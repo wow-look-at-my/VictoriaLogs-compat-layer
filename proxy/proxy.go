@@ -363,27 +363,20 @@ func handleQuery(w http.ResponseWriter, r *http.Request, backend *url.URL) {
 
 // writeProbeResponse evaluates a constant Prometheus probe query and writes a
 // Prometheus-shaped response — vector for /query, matrix for /query_range.
-// Falls back to a status=success empty result if the expression can't be
-// parsed, so health checks still see a 200 instead of a 400 from VL.
+// If the expression isn't in the subset we can evaluate, return 501 so the
+// gap is visible rather than masked by a fake empty result.
 func writeProbeResponse(w http.ResponseWriter, r *http.Request, params url.Values) {
-	w.Header().Set("Content-Type", "application/json")
-
-	v, ok := evalProbe(params.Get("query"))
-	isRange := strings.HasSuffix(r.URL.Path, "/query_range")
-
+	q := params.Get("query")
+	v, ok := evalProbe(q)
 	if !ok {
-		// Unparseable probe — return an empty success so Grafana sees a 200.
-		if isRange {
-			w.Write([]byte(`{"status":"success","data":{"resultType":"matrix","result":[]}}`))
-		} else {
-			w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
-		}
+		http.Error(w, "probe query not implemented: "+q, http.StatusNotImplemented)
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	valStr := strconv.FormatFloat(v, 'f', -1, 64)
 
-	if isRange {
+	if strings.HasSuffix(r.URL.Path, "/query_range") {
 		samples := probeRangeSamples(params)
 		results := make([]lokiVolumeRangeResult, 1)
 		results[0].Metric = map[string]string{}
