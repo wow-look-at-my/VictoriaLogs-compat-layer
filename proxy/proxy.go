@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -35,6 +36,7 @@ const (
 	buildinfoPath           = "/loki/api/v1/status/buildinfo"
 	tailPath                = "/loki/api/v1/tail"
 	promTailPath            = "/api/prom/tail"
+	drilldownLimitsPath     = "/loki/api/v1/drilldown-limits"
 )
 
 // notImplementedPaths lists every Loki API path that the compat layer does not
@@ -93,6 +95,10 @@ func NewProxy(backend *url.URL) http.Handler {
 	mux.HandleFunc(patternsPath, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"success","data":[]}`))
+	})
+	mux.HandleFunc(drilldownLimitsPath, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"max_query_series":1000,"max_query_length":"721h","max_query_lookback":"721h"}`))
 	})
 	mux.HandleFunc(queryPath, func(w http.ResponseWriter, r *http.Request) {
 		handleQuery(w, r, backend)
@@ -330,7 +336,26 @@ func handleLabelValues(w http.ResponseWriter, r *http.Request, backend *url.URL)
 	w.Write(result)
 }
 
+// isProbeQuery detects synthetic Prometheus liveness-probe queries (e.g.
+// "vector(1)+vector(1)") that Grafana's Loki datasource health check sends.
+// A real LogQL query always contains a stream selector "{...}"; queries with
+// no '{' are treated as probes and short-circuited so they don't hit VL.
+func isProbeQuery(q string) bool {
+	s := strings.TrimSpace(q)
+	return s != "" && !strings.Contains(s, "{")
+}
+
 func handleQuery(w http.ResponseWriter, r *http.Request, backend *url.URL) {
+	params, err := extractParams(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if isProbeQuery(params.Get("query")) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"success","data":{"resultType":"streams","result":[]}}`))
+		return
+	}
 	handleTranslated(w, r, backend, BuildQueryRequest, ConvertQueryToStreams)
 }
 
