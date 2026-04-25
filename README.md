@@ -31,6 +31,8 @@ Point Grafana (or any Loki client) at this proxy instead of directly at Victoria
 | `/loki/api/v1/push` | `/insert/loki/api/v1/push` |
 | `/otlp/v1/logs` | `/insert/opentelemetry/api/logs/export` |
 
+If the request doesn't already specify `_msg_field` (query) or `VL-Msg-Field` (header), the proxy adds `_msg_field=_msg,message,msg,body,log,event,event.original` so VictoriaLogs can find the log message in the common JSON shapes used by structured loggers, OTLP, and Docker/K8s — preventing the "missing _msg field" warning. Clients that pass either argument keep their explicit choice.
+
 ### Prometheus-style aliases
 
 The legacy `/api/prom/*` variants (`query`, `label`, `label/{name}/values`, `series`, `push`, `tail`) are accepted and dispatched to the same handlers as their `/loki/api/v1/*` equivalents.
