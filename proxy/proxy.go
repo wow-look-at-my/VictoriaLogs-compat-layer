@@ -46,8 +46,9 @@ const (
 // a "missing _msg field" warning for every JSON payload whose message lives
 // under a name other than `_msg` — which is the common case (`message` for
 // most structured loggers, `body` for OTLP, `msg` for slog/zerolog,
-// `log` for Docker/K8s, `event.original` for ECS).
-const defaultMsgFields = "_msg,message,msg,body,log,event,event.original"
+// `log` for Docker/K8s, `line` for Promtail/Alloy/Vector raw-line wrappers,
+// `event.original` for ECS).
+const defaultMsgFields = "_msg,message,msg,body,log,line,event,event.original"
 
 // notImplementedPaths lists every Loki API path that the compat layer does not
 // yet translate. Each is registered as 501 Not Implemented so callers get an
