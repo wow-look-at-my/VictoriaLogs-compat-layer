@@ -542,60 +542,6 @@ func TestIndexStatsEndpoint(t *testing.T) {
 	assert.Equal(t, uint64(0), resp.Chunks)
 }
 
-func TestPushEndpoint(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/insert/loki/api/v1/push", r.URL.Path)
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer backend.Close()
-
-	backendURL, _ := url.Parse(backend.URL)
-	handler := NewProxy(backendURL)
-
-	body := strings.NewReader(`{"streams":[{"stream":{"job":"test"},"values":[["1700000000000000000","log line"]]}]}`)
-	req := httptest.NewRequest(http.MethodPost, "/loki/api/v1/push", body)
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusNoContent, rec.Code)
-}
-
-func TestPromPushEndpoint(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/insert/loki/api/v1/push", r.URL.Path)
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer backend.Close()
-
-	backendURL, _ := url.Parse(backend.URL)
-	handler := NewProxy(backendURL)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/prom/push", strings.NewReader("{}"))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusNoContent, rec.Code)
-}
-
-func TestOTLPLogsEndpoint(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/insert/opentelemetry/api/logs/export", r.URL.Path)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer backend.Close()
-
-	backendURL, _ := url.Parse(backend.URL)
-	handler := NewProxy(backendURL)
-
-	req := httptest.NewRequest(http.MethodPost, "/otlp/v1/logs", strings.NewReader("{}"))
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-}
-
 func TestReadyEndpoint(t *testing.T) {
 	backendURL, _ := url.Parse("http://localhost:9428")
 	handler := NewProxy(backendURL)

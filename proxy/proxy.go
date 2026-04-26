@@ -41,6 +41,15 @@ const (
 	drilldownLimitsPath     = "/loki/api/v1/drilldown-limits"
 )
 
+// defaultMsgFields is the comma-separated list passed as `_msg_field` on push
+// requests when the client doesn't supply one. Without this, VictoriaLogs emits
+// a "missing _msg field" warning for every JSON payload whose message lives
+// under a name other than `_msg` — which is the common case (`message` for
+// most structured loggers, `body` for OTLP, `msg` for slog/zerolog,
+// `log` for Docker/K8s, `line` for Promtail/Alloy/Vector raw-line wrappers,
+// `event.original` for ECS).
+const defaultMsgFields = "_msg,message,msg,body,log,line,event,event.original"
+
 // notImplementedPaths lists every Loki API path that the compat layer does not
 // yet translate. Each is registered as 501 Not Implemented so callers get an
 // explicit error rather than a confusing response from VictoriaLogs.
@@ -134,13 +143,13 @@ func NewProxy(backend *url.URL) http.Handler {
 		handleIndexStats(w, r, backend)
 	})
 	mux.HandleFunc(pushPath, func(w http.ResponseWriter, r *http.Request) {
-		handleProxyRewrite(w, r, backend, "/insert/loki/api/v1/push")
+		handleProxyRewrite(w, r, backend, "/insert/loki/api/v1/push", applyMsgFieldDefault)
 	})
 	mux.HandleFunc(promPushPath, func(w http.ResponseWriter, r *http.Request) {
-		handleProxyRewrite(w, r, backend, "/insert/loki/api/v1/push")
+		handleProxyRewrite(w, r, backend, "/insert/loki/api/v1/push", applyMsgFieldDefault)
 	})
 	mux.HandleFunc(otlpLogsPath, func(w http.ResponseWriter, r *http.Request) {
-		handleProxyRewrite(w, r, backend, "/insert/opentelemetry/api/logs/export")
+		handleProxyRewrite(w, r, backend, "/insert/opentelemetry/api/logs/export", applyMsgFieldDefault)
 	})
 	mux.HandleFunc(promQueryPath, func(w http.ResponseWriter, r *http.Request) {
 		handleQuery(w, r, backend)
@@ -518,13 +527,34 @@ func handleIndexStats(w http.ResponseWriter, r *http.Request, backend *url.URL) 
 	handleTranslated(w, r, backend, BuildStatsRequest, ConvertStatsToIndexStats)
 }
 
+// applyMsgFieldDefault sets `_msg_field` on the outgoing query string when the
+// client hasn't expressed a preference via either the query argument or the
+// VL-Msg-Field HTTP header. The default lists the most common message field
+// names so VictoriaLogs can lift the message out of structured JSON without
+// per-deployment configuration.
+func applyMsgFieldDefault(q url.Values, r *http.Request) {
+	if q.Get("_msg_field") != "" || r.Header.Get("VL-Msg-Field") != "" {
+		return
+	}
+	q.Set("_msg_field", defaultMsgFields)
+}
+
 // handleProxyRewrite forwards the request to the backend with a different path,
 // proxying headers and body unchanged. Used for push/ingest endpoints where
-// VictoriaLogs uses a different URL prefix than Loki.
-func handleProxyRewrite(w http.ResponseWriter, r *http.Request, backend *url.URL, targetPath string) {
+// VictoriaLogs uses a different URL prefix than Loki. If mutateQuery is non-nil
+// it is called with the parsed query string and the incoming request, allowing
+// the caller to inject defaults that the client didn't already supply.
+func handleProxyRewrite(w http.ResponseWriter, r *http.Request, backend *url.URL, targetPath string, mutateQuery func(url.Values, *http.Request)) {
 	u := *backend
 	u.Path = targetPath
-	u.RawQuery = r.URL.RawQuery
+
+	if mutateQuery == nil {
+		u.RawQuery = r.URL.RawQuery
+	} else {
+		q := r.URL.Query()
+		mutateQuery(q, r)
+		u.RawQuery = q.Encode()
+	}
 
 	proxyReq, err := http.NewRequest(r.Method, u.String(), r.Body)
 	if err != nil {
