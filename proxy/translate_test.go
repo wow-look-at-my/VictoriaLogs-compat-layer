@@ -4,8 +4,8 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/wow-look-at-my/testify/assert"
-	"github.com/wow-look-at-my/testify/require"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTranslateQuery(t *testing.T) {
@@ -220,12 +220,12 @@ func TestBuildQueryRequest(t *testing.T) {
 	backend, _ := url.Parse("http://localhost:9428")
 
 	tests := []struct {
-		name        string
-		params      url.Values
-		wantStart   string
-		wantEnd     string
-		wantLimit   string
-		wantQuery   string
+		name      string
+		params    url.Values
+		wantStart string
+		wantEnd   string
+		wantLimit string
+		wantQuery string
 	}{
 		{
 			name: "basic start/end/limit",

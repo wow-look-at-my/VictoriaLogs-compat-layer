@@ -111,13 +111,13 @@ func NewProxy(backend *url.URL) http.Handler {
 		Version:                "unknown",
 		PatternIngesterEnabled: false,
 		Limits: lokiDrilldownInnerLimit{
-			RetentionPeriod:         "0s",
-			MaxQueryLength:          "0s",
-			MaxQueryLookback:        "0s",
-			MaxQueryRange:           "0s",
-			QueryTimeout:            "0s",
-			VolumeEnabled:           true,
-			DiscoverLogLevels:       true,
+			RetentionPeriod:   "0s",
+			MaxQueryLength:    "0s",
+			MaxQueryLookback:  "0s",
+			MaxQueryRange:     "0s",
+			QueryTimeout:      "0s",
+			VolumeEnabled:     true,
+			DiscoverLogLevels: true,
 		},
 	})
 	mux.HandleFunc(drilldownLimitsPath, func(w http.ResponseWriter, _ *http.Request) {
